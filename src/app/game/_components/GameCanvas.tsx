@@ -29,7 +29,6 @@ const POWER_SIZE: Vec = { x: 28, y: 28 };
 const SCROLL_SPEED = 160; // px/s (world moves downward visually)
 const PLAYER_BASE_SPEED = 320; // px/s
 const BULLET_SPEED = 640; // px/s upward
-const OBSTACLE_SPEED = 140; // px/s downward (relative)
 const SPAWN_RATE_OBS = 1.2; // per second
 const SPAWN_RATE_PWR = 0.35; // per second
 const FIRE_RATE_MS = 140; // min ms between shots
@@ -55,6 +54,9 @@ export default function GameCanvas() {
   const lastTsRef = useRef<number>(0);
   const keysRef = useRef<Record<string, boolean>>({});
   const lastShotRef = useRef<number>(0);
+  // Aiming: angle in radians. 0 = straight up, +right/-left tilt
+  const aimAngleRef = useRef<number>(0);
+  const [aimDeg, setAimDeg] = useState(0);
 
   // --- WebSocket (mobile tilt controller) ---
   const wsRef = useRef<WebSocket | null>(null);
@@ -154,17 +156,22 @@ export default function GameCanvas() {
       const p = playerRef.current;
 
       const spread = Math.min(powerLevel - 1, 3); // up to 3 side bullets
+      const angleStep = 0.12; // side bullet spread (radians)
       const bullets: Bullet[] = [];
       for (let i = -spread; i <= spread; i++) {
-        const offsetX = i * 10;
+        const theta = aimAngleRef.current + i * angleStep;
+        const dirX = Math.sin(theta);
+        const dirY = -Math.cos(theta); // canvas up is -Y
+        const offX = Math.cos(theta + Math.PI / 2) * i * 6;
+        const offY = Math.sin(theta + Math.PI / 2) * i * 6;
         bullets.push({
           type: "bullet",
-          x: p.x + p.w / 2 - BULLET_SIZE.x / 2 + offsetX,
-          y: p.y - BULLET_SIZE.y,
+          x: p.x + p.w / 2 - BULLET_SIZE.x / 2 + offX,
+          y: p.y - BULLET_SIZE.y + offY,
           w: BULLET_SIZE.x,
           h: BULLET_SIZE.y,
-          vx: 0,
-          vy: -BULLET_SPEED,
+          vx: dirX * BULLET_SPEED,
+          vy: dirY * BULLET_SPEED,
           speed: BULLET_SPEED,
         });
       }
@@ -466,9 +473,10 @@ export default function GameCanvas() {
 
   // (fire defined above)
 
-  // Spawn helpers
-  const spawnObstacle = (y: number) => {
+  // Spawn helpers (static obstacles/power-ups within current viewport)
+  const spawnObstacle = () => {
     const x = Math.random() * (CANVAS_W - OBSTACLE_SIZE.x);
+    const y = Math.random() * (CANVAS_H * 0.7);
     obstaclesRef.current.push({
       type: "obstacle",
       x,
@@ -476,11 +484,12 @@ export default function GameCanvas() {
       w: OBSTACLE_SIZE.x,
       h: OBSTACLE_SIZE.y,
       vx: 0,
-      vy: OBSTACLE_SPEED,
+      vy: 0,
     });
   };
-  const spawnPower = (y: number) => {
+  const spawnPower = () => {
     const x = Math.random() * (CANVAS_W - POWER_SIZE.x);
+    const y = Math.random() * (CANVAS_H * 0.7);
     powersRef.current.push({
       type: "powerup",
       x,
@@ -488,7 +497,7 @@ export default function GameCanvas() {
       w: POWER_SIZE.x,
       h: POWER_SIZE.y,
       vx: 0,
-      vy: OBSTACLE_SPEED * 0.8,
+      vy: 0,
     });
   };
 
@@ -532,25 +541,42 @@ export default function GameCanvas() {
       // Shooting
       if (k.space) fire(ts);
 
-      // Spawn entities probabilistically using dt
-      if (Math.random() < SPAWN_RATE_OBS * dt) spawnObstacle(-OBSTACLE_SIZE.y);
-      if (Math.random() < SPAWN_RATE_PWR * dt) spawnPower(-POWER_SIZE.y * 2);
+      // Update aiming angle from WS gamma (left/right tilt)
+      if (wsConnectedRef.current) {
+        const maxRad = (80 * Math.PI) / 180; // clamp to ±80°
+        const rad = wsAxRef.current * maxRad;
+        aimAngleRef.current = rad;
+        setAimDeg(Math.round((rad * 180) / Math.PI));
+      } else {
+        aimAngleRef.current = 0;
+        setAimDeg(0);
+      }
 
-      // Update bullets
-      bulletsRef.current.forEach((b) => (b.y += b.vy * dt));
-      bulletsRef.current = bulletsRef.current.filter((b) => b.y + b.h > -40);
+      // Spawn static entities probabilistically using dt
+      if (Math.random() < SPAWN_RATE_OBS * dt) spawnObstacle();
+      if (Math.random() < SPAWN_RATE_PWR * dt) spawnPower();
 
-      // Update obstacles/powers (move with their vy + scroll)
-      obstaclesRef.current.forEach(
-        (o) => (o.y += (o.vy + SCROLL_SPEED * 0.3) * dt),
+      // Update bullets (angled movement)
+      bulletsRef.current.forEach((b) => {
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+      });
+      bulletsRef.current = bulletsRef.current.filter(
+        (b) =>
+          b.y + b.h > -60 &&
+          b.y < CANVAS_H + 60 &&
+          b.x + b.w > -60 &&
+          b.x < CANVAS_W + 60,
       );
-      powersRef.current.forEach(
-        (o) => (o.y += (o.vy + SCROLL_SPEED * 0.25) * dt),
-      );
+
+      // Keep obstacles/powers static (no drift)
+      // Remove any that drifted out inadvertently
       obstaclesRef.current = obstaclesRef.current.filter(
-        (o) => o.y < CANVAS_H + 80,
+        (o) => o.y > -100 && o.y < CANVAS_H + 100,
       );
-      powersRef.current = powersRef.current.filter((o) => o.y < CANVAS_H + 80);
+      powersRef.current = powersRef.current.filter(
+        (o) => o.y > -100 && o.y < CANVAS_H + 100,
+      );
 
       // Collisions: bullets vs obstacles
       for (const b of bulletsRef.current) {
@@ -742,13 +768,13 @@ export default function GameCanvas() {
       ctx.font = "16px monospace";
       if (usingTiles) {
         ctx.fillText(
-          `Score: ${score}  Power: ${powerLevel}  Tile: ${currentTileIndex + 1}/${TOTAL_TILES}`,
+          `Score: ${score}  Power: ${powerLevel}  Aim: ${aimDeg}°  Tile: ${currentTileIndex + 1}/${TOTAL_TILES}`,
           12,
           22,
         );
       } else {
         ctx.fillText(
-          `Score: ${score}  Power: ${powerLevel}  Dist: ${Math.floor(worldY)}/${goalDistance}`,
+          `Score: ${score}  Power: ${powerLevel}  Aim: ${aimDeg}°  Dist: ${Math.floor(worldY)}/${goalDistance}`,
           12,
           22,
         );
