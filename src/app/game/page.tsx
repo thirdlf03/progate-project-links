@@ -1,6 +1,7 @@
 import { HydrateClient } from "~/trpc/server";
 import { Suspense } from "react";
 import GameCanvas from "./_components/GameCanvas";
+import Leaderboard from "./_components/Leaderboard";
 
 export default function GamePage() {
   return (
@@ -12,6 +13,9 @@ export default function GamePage() {
           </h1>
           <Suspense>
             <GameCanvas />
+          </Suspense>
+          <Suspense>
+            <Leaderboard />
           </Suspense>
         </div>
       </div>
