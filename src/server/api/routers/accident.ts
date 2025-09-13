@@ -25,7 +25,7 @@ export const accidentRouter = createTRPCRouter({
       const contextJson = toCompactJson(selections);
       const prompt = `${contextJson}をもとに、めちゃくちゃリアルな事故原因を考えてください。`;
 
-      const answer = await invokeAnthropicMessages({ prompt, maxTokens: 800 });
+      const answer = await invokeAnthropicMessages({ prompt, maxTokens: 1200 });
       return { answer, usedRows: selections.length };
     }),
 });
