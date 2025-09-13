@@ -412,9 +412,22 @@ export default function GameCanvas() {
 
       // Background: follow route if ready; else fallback to vertical tile
       if (bgImg.complete && bgImg.naturalWidth > 0 && routeRef.current) {
-        const scale = CANVAS_W / bgImg.naturalWidth; // fit width
-        const srcW = Math.min(bgImg.naturalWidth, CANVAS_W / scale);
-        const srcH = Math.min(bgImg.naturalHeight, CANVAS_H / scale);
+        // Choose a viewport smaller than the image to allow panning in both axes.
+        const viewportFrac = 0.45; // portion of the image width used for the viewport
+        const srcW = Math.max(
+          64,
+          Math.min(
+            bgImg.naturalWidth,
+            Math.floor(bgImg.naturalWidth * viewportFrac),
+          ),
+        );
+        const srcH = Math.max(
+          64,
+          Math.min(
+            bgImg.naturalHeight,
+            Math.floor((srcW * CANVAS_H) / CANVAS_W),
+          ),
+        );
         const cam = getPointAt(worldY) ?? {
           x: bgImg.naturalWidth / 2,
           y: bgImg.naturalHeight / 2,
