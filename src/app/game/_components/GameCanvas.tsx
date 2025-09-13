@@ -56,9 +56,12 @@ export default function GameCanvas() {
   const [worldY, setWorldY] = useState(CANVAS_H);
   const [score, setScore] = useState(0);
   const [powerLevel, setPowerLevel] = useState(1);
+  const [crashCause, setCrashCause] = useState<string | null>(null);
+  const [causeLoading, setCauseLoading] = useState(false);
   const submittedRef = useRef(false);
 
   const recordRun = api.game.recordRun.useMutation();
+  const analyzeCrash = api.game.analyzeCrash.useMutation();
   const { data: serverKeymap } = api.keymap.get.useQuery();
 
   const playerRef = useRef<Player>({
@@ -521,7 +524,27 @@ export default function GameCanvas() {
       durationMs: Math.round(state.durationMs),
       score,
     });
-  }, [state, recordRun, score]);
+
+    // On lose, ask Bedrock for a plausible cause using CSV context
+    if (!state.win) {
+      setCauseLoading(true);
+      setCrashCause(null);
+      void analyzeCrash
+        .mutateAsync({
+          score,
+          durationMs: Math.round(state.durationMs),
+          distance: Math.floor(worldY),
+          powerLevel,
+          language: "ja",
+        })
+        .then((res) => setCrashCause(res.cause))
+        .catch(() => setCrashCause("原因の推定に失敗しました。"))
+        .finally(() => setCauseLoading(false));
+    } else {
+      setCrashCause(null);
+      setCauseLoading(false);
+    }
+  }, [state, recordRun, analyzeCrash, score, powerLevel, worldY]);
 
   const start = () => {
     // Ensure clean input state when starting
@@ -556,6 +579,18 @@ export default function GameCanvas() {
             <p className="mb-4">
               Time: {(state.durationMs / 1000).toFixed(2)}s | Score: {score}
             </p>
+            {!state.win && (
+              <div className="mx-auto mb-4 max-w-md text-left text-sm text-zinc-200">
+                <p className="mb-1 font-semibold">推定された事故原因</p>
+                <div className="rounded-md bg-zinc-800 px-3 py-2">
+                  {causeLoading ? (
+                    <span>事故原因を推定中...</span>
+                  ) : (
+                    <span>{crashCause ?? "(なし)"}</span>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="flex justify-center gap-3">
               <button
                 className="rounded bg-emerald-500 px-4 py-2 hover:bg-emerald-600"
