@@ -86,6 +86,8 @@ export default function GameCanvas() {
     setWorldY(0);
     setScore(0);
     setPowerLevel(1);
+    // Clear input state to avoid stuck keys between runs
+    keysRef.current = {};
     playerRef.current = {
       type: "player",
       x: CANVAS_W / 2 - PLAYER_SIZE.x / 2,
@@ -106,12 +108,16 @@ export default function GameCanvas() {
     const mapCodeToKey = (e: KeyboardEvent): string | null => {
       switch (e.code) {
         case "KeyW":
+        case "ArrowUp":
           return "w";
         case "KeyA":
+        case "ArrowLeft":
           return "a";
         case "KeyS":
+        case "ArrowDown":
           return "s";
         case "KeyD":
+        case "ArrowRight":
           return "d";
         case "Space":
           return "space";
@@ -130,23 +136,55 @@ export default function GameCanvas() {
         k.toLowerCase() === "spacebar"
       )
         return "space";
+      // Map arrow keys by key as a fallback too
+      if (k === "ArrowUp") return "w";
+      if (k === "ArrowLeft") return "a";
+      if (k === "ArrowDown") return "s";
+      if (k === "ArrowRight") return "d";
       return k.toLowerCase();
     };
 
+    const setKey = (key: string, pressed: boolean) => {
+      // Only track known keys
+      if (
+        key === "w" ||
+        key === "a" ||
+        key === "s" ||
+        key === "d" ||
+        key === "space"
+      ) {
+        keysRef.current[key] = pressed;
+      }
+    };
+
     const onKeyDown = (e: KeyboardEvent) => {
+      // Ignore modifier combos like Cmd/Ctrl/Alt
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       const key = normalizeKey(e);
-      if (key === "space") e.preventDefault();
-      keysRef.current[key] = true;
+      if (key === "space" || key === "w" || key === "s") e.preventDefault();
+      setKey(key, true);
     };
     const onKeyUp = (e: KeyboardEvent) => {
       const key = normalizeKey(e);
-      keysRef.current[key] = false;
+      setKey(key, false);
     };
+
+    const clearKeys = () => {
+      keysRef.current = {};
+    };
+    const onVisibilityChange = () => {
+      if (document.hidden) clearKeys();
+    };
+
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", clearKeys);
+    document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", clearKeys);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []);
 
@@ -382,6 +420,8 @@ export default function GameCanvas() {
   }, [state, recordRun, score]);
 
   const start = () => {
+    // Ensure clean input state when starting
+    keysRef.current = {};
     setState({ status: "running", startedAt: performance.now() });
     submittedRef.current = false;
   };
@@ -391,7 +431,7 @@ export default function GameCanvas() {
       return (
         <div className="absolute inset-0 grid place-items-center bg-black/60">
           <div className="rounded-lg bg-zinc-900/80 p-6 text-center">
-            <p className="mb-4">WASD: Move / Space: Shoot</p>
+            <p className="mb-4">WASD or Arrow Keys: Move / Space: Shoot</p>
             <p className="mb-4">Reach the goal without hitting obstacles.</p>
             <button
               className="rounded bg-emerald-500 px-4 py-2 hover:bg-emerald-600"
