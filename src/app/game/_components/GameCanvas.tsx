@@ -41,7 +41,8 @@ const tryLoadImage = (src: string) => {
   return img;
 };
 
-const bgCandidates = ["/maps/map1.jpg", "/maps/map1.png", "/maps/map1.jpeg"];
+// Prefer PNG; .jpg/.jpeg kept as secondary fallbacks
+const bgCandidates = ["/maps/map1.png", "/maps/map1.jpg", "/maps/map1.jpeg"];
 
 export default function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -76,7 +77,7 @@ export default function GameCanvas() {
   const powersRef = useRef<PowerUp[]>([]);
 
   const bgImg = useMemo(() => {
-    const candidate = bgCandidates.find((s) => !!s) ?? "/maps/map1.jpg";
+    const candidate = bgCandidates.find((s) => !!s) ?? "/maps/map1.png";
     return tryLoadImage(candidate);
   }, []);
 
