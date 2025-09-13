@@ -23,7 +23,7 @@ export const accidentRouter = createTRPCRouter({
         input.topK ?? 20,
       );
       const contextJson = toCompactJson(selections);
-      const prompt = `You are a helpful data analyst. You are given a table's JSON rows and a user question.\n\n- Use only the provided rows to answer.\n- If information is insufficient, say so clearly.\n- Show key figures and reasoning briefly.\n\nQuestion: ${input.question}\nRows (JSON): ${contextJson}`;
+      const prompt = `${contextJson}をもとに、めちゃくちゃリアルな事故原因を考えてください。`;
 
       const answer = await invokeAnthropicMessages({ prompt, maxTokens: 800 });
       return { answer, usedRows: selections.length };

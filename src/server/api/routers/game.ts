@@ -60,7 +60,7 @@ export const gameRouter = createTRPCRouter({
       const selections = selectRelevantRows(rows, baseQuestion, 20);
       const contextJson = toCompactJson(selections);
 
-      const prompt = `CSV ${contextJson}をもとに、やけにリアルな事故原因を考えてください。`;
+      const prompt = `CSV ${contextJson}をもとに、やけにリアルな事故原因を1つ考えてください。その後、再発防止策まで提示すること`;
 
       // Call Bedrock with a graceful fallback in case local AWS auth is missing/expired.
       let cause: string;
