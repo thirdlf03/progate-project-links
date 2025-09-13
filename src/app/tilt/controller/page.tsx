@@ -12,7 +12,7 @@ export default function TiltControllerPage() {
   const zeroBetaRef = useRef(0);
   const zeroGammaRef = useRef(0);
   const wsRef = useRef<WebSocket | null>(null);
-  const room = useMemo(() => {
+  const initialRoom = useMemo(() => {
     try {
       const sp = new URLSearchParams(window.location.search);
       const r = (sp.get("room") ?? "default").trim();
@@ -21,6 +21,12 @@ export default function TiltControllerPage() {
       return "default";
     }
   }, []);
+  const [room, setRoom] = useState<string>(initialRoom);
+
+  const normalizeRoom = (v: string) => {
+    const s = (v ?? "").toLowerCase().replace(/[^a-z0-9_-]/g, "");
+    return s.length > 0 ? s : "default";
+  };
 
   const wsURL = useMemo(() => {
     const envUrl = process.env.NEXT_PUBLIC_TILT_WS_URL;
@@ -112,7 +118,13 @@ export default function TiltControllerPage() {
     sock.addEventListener("open", () => {
       setStatus("connected");
       try {
-        sock.send(JSON.stringify({ type: "join", role: "controller", room }));
+        sock.send(
+          JSON.stringify({
+            type: "join",
+            role: "controller",
+            room: normalizeRoom(room),
+          }),
+        );
       } catch {}
     });
     const onClose = () => setStatus("error");
@@ -128,16 +140,39 @@ export default function TiltControllerPage() {
     const sock = wsRef.current;
     if (!sock || sock.readyState !== WebSocket.OPEN) return;
     try {
-      sock.send(JSON.stringify({ type: "shoot", room, t: Date.now() }));
+      sock.send(
+        JSON.stringify({
+          type: "shoot",
+          room: normalizeRoom(room),
+          t: Date.now(),
+        }),
+      );
     } catch {}
   }
 
   return (
     <div className="mx-auto max-w-xl p-6">
       <h1 className="mb-4 text-2xl font-bold">スマホ傾きコントローラー</h1>
-      <p className="mb-2 text-sm text-zinc-500">
-        Room: <code>{room}</code>
-      </p>
+      <div className="mb-3">
+        <label className="mb-1 block text-sm text-zinc-300">
+          部屋名 (room)
+        </label>
+        <input
+          type="text"
+          value={room}
+          onChange={(e) => setRoom(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void connect();
+          }}
+          placeholder="例: team-a"
+          className="w-full rounded-md border border-zinc-600 bg-zinc-800 px-3 py-2 text-white outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <p className="mt-1 text-xs text-zinc-500">
+          使用可能: 英小文字・数字・ハイフン・アンダースコア。空の場合は
+          <code className="mx-1">default</code>
+          になります。
+        </p>
+      </div>
       <div className="mb-4 flex gap-2">
         <button
           onClick={connect}
