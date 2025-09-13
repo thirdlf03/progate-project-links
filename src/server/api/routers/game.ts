@@ -60,15 +60,13 @@ export const gameRouter = createTRPCRouter({
       const selections = selectRelevantRows(rows, baseQuestion, 20);
       const contextJson = toCompactJson(selections);
 
-      const promptJa = `あなたはデータアナリストです。以下のJSON行（CSVの一部）を根拠として、ゲーム内でプレイヤーが障害物に衝突した「もっともらしい原因」を日本語で1〜2文で説明してください。推測であることを匂わせつつ、現実世界の助言は不要です。\n\nゲーム状況: スコア=${input.score}, 経過時間=${Math.round(input.durationMs / 1000)}秒, 距離=${input.distance ?? 0}, パワー=${input.powerLevel ?? 1}\n根拠データ(抜粋JSON): ${contextJson}`;
-
-      const promptEn = `You are a data analyst. Using only the JSON rows (subset from a CSV) as hints, write 1–2 sentences with a plausible cause for why the player crashed into an obstacle in the game. Keep it concise, no real-world advice.\n\nGame: score=${input.score}, duration=${Math.round(input.durationMs / 1000)}s, distance=${input.distance ?? 0}, power=${input.powerLevel ?? 1}\nRows(JSON): ${contextJson}`;
+      const prompt = `CSV ${contextJson}をもとに、やけにリアルな事故原因を考えてください。`;
 
       // Call Bedrock with a graceful fallback in case local AWS auth is missing/expired.
       let cause: string;
       try {
         const answer = await invokeAnthropicMessages({
-          prompt: input.language === "ja" ? promptJa : promptEn,
+          prompt,
           maxTokens: 300,
           temperature: 0.4,
         });
