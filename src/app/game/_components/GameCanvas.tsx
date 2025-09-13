@@ -57,6 +57,10 @@ export default function GameCanvas() {
   const wsAxRef = useRef(0); // normalized [-1,1] from gamma
   const wsAyRef = useRef(0); // normalized [-1,1] from beta
   const roomRef = useRef<string>("default");
+  const normalizeRoom = (v: string) => {
+    const s = (v ?? "").toLowerCase().replace(/[^a-z0-9_-]/g, "");
+    return s.length > 0 ? s : "default";
+  };
   // internal ws status (not rendered)
   const wsStatusRef = useRef<"idle" | "connecting" | "connected" | "error">(
     "idle",
@@ -95,16 +99,20 @@ export default function GameCanvas() {
     return tryLoadImage(candidate);
   }, []);
 
-  // Resolve room from query (?room=xxx) on mount
-  useEffect(() => {
+  // Resolve room from query (?room=xxx) on mount and hold an input state until start
+  const initialRoom = useMemo(() => {
     try {
       const params = new URLSearchParams(window.location.search);
       const r = (params.get("room") ?? "default").trim();
-      roomRef.current = r || "default";
+      return r || "default";
     } catch {
-      roomRef.current = "default";
+      return "default";
     }
   }, []);
+  const [roomInput, setRoomInput] = useState<string>(initialRoom);
+  useEffect(() => {
+    roomRef.current = normalizeRoom(initialRoom);
+  }, [initialRoom]);
 
   // Fire bullets; used by keyboard and WS 'shoot' events
   const fire = useCallback(
@@ -682,6 +690,14 @@ export default function GameCanvas() {
   const start = () => {
     // Ensure clean input state when starting
     keysRef.current = {};
+    // Apply room input and persist to URL so controller can join easily
+    const r = normalizeRoom(roomInput);
+    roomRef.current = r;
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("room", r);
+      window.history.replaceState({}, "", url.toString());
+    } catch {}
     // Connect to mobile controller WS at game start
     connectWS();
     setState({ status: "running", startedAt: performance.now() });
@@ -692,9 +708,32 @@ export default function GameCanvas() {
     if (state.status === "init")
       return (
         <div className="absolute inset-0 grid place-items-center bg-black/60">
-          <div className="rounded-lg bg-zinc-900/80 p-6 text-center">
-            <p className="mb-4">WASD or Arrow Keys: Move / Space: Shoot</p>
-            <p className="mb-4">Reach the goal without hitting obstacles.</p>
+          <div className="w-[min(92vw,560px)] rounded-lg bg-zinc-900/80 p-6 text-center">
+            <div className="mb-4 text-left">
+              <label className="mb-1 block text-sm text-zinc-300">
+                部屋名 (room)
+              </label>
+              <input
+                type="text"
+                value={roomInput}
+                onChange={(e) => setRoomInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") start();
+                }}
+                placeholder="例: team-a"
+                className="w-full rounded-md border border-zinc-600 bg-zinc-800 px-3 py-2 text-white outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+              <p className="mt-1 text-xs text-zinc-400">
+                使用可能: 英小文字・数字・ハイフン・アンダースコア。空の場合は
+                <code className="mx-1">default</code>
+                になります。
+              </p>
+            </div>
+            <p className="mb-2">WASD or Arrow Keys: Move / Space: Shoot</p>
+            <p className="mb-4 text-xs text-zinc-400">
+              スマホ側URL:{" "}
+              <code>/tilt/controller?room={normalizeRoom(roomInput)}</code>
+            </p>
             <button
               className="rounded bg-emerald-500 px-4 py-2 hover:bg-emerald-600"
               onClick={start}
