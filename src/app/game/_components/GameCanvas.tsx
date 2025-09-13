@@ -81,6 +81,70 @@ export default function GameCanvas() {
     return tryLoadImage(candidate);
   }, []);
 
+  // --- Route & camera setup (serpentine) ---
+  const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
+  const [goalDistance, setGoalDistance] = useState<number>(GOAL_DISTANCE);
+  const routeRef = useRef<{
+    points: Vec[];
+    cum: number[];
+    length: number;
+  } | null>(null);
+
+  // Wait image natural size
+  useEffect(() => {
+    const update = (_e: Event) => {
+      if (bgImg.naturalWidth > 0 && bgImg.naturalHeight > 0) {
+        setImgSize({ w: bgImg.naturalWidth, h: bgImg.naturalHeight });
+      }
+    };
+    if (bgImg.complete) update(new Event("load"));
+    else bgImg.addEventListener("load", update, { once: true });
+    return () => bgImg.removeEventListener("load", update);
+  }, [bgImg]);
+
+  // tRPC: request serpentine route once image size is known
+  const { data: serverRoute } = api.map.computeRoute.useQuery(
+    imgSize
+      ? { imgW: imgSize.w, imgH: imgSize.h, rows: 6, cols: 8, margin: 40 }
+      : { imgW: 1, imgH: 1, rows: 1, cols: 1, margin: 0 },
+    { enabled: !!imgSize },
+  );
+
+  useEffect(() => {
+    if (!serverRoute) return;
+    const pts: Vec[] = serverRoute.points as Vec[];
+    const cum: number[] = [0];
+    let total = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i]!;
+      const b = pts[i - 1]!;
+      total += Math.hypot(a.x - b.x, a.y - b.y);
+      cum.push(total);
+    }
+    routeRef.current = { points: pts, cum, length: serverRoute.length };
+    setGoalDistance(Math.max(1, Math.round(serverRoute.length)));
+  }, [serverRoute]);
+
+  const getPointAt = useCallback((dist: number): Vec | null => {
+    const r = routeRef.current;
+    if (!r) return null;
+    const d = Math.max(0, Math.min(r.length, dist));
+    let lo = 0,
+      hi = r.cum.length - 1;
+    while (lo < hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      if (r.cum[mid]! < d) lo = mid + 1;
+      else hi = mid;
+    }
+    const idx = Math.max(1, lo);
+    const d1 = r.cum[idx - 1]!;
+    const d2 = r.cum[idx]!;
+    const p1 = r.points[idx - 1]!;
+    const p2 = r.points[idx]!;
+    const t = d2 === d1 ? 0 : (d - d1) / (d2 - d1);
+    return { x: p1.x + (p2.x - p1.x) * t, y: p1.y + (p2.y - p1.y) * t };
+  }, []);
+
   const aabb = (a: Rect, b: Rect) =>
     a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
@@ -335,8 +399,8 @@ export default function GameCanvas() {
       }
       powersRef.current = powersRef.current.filter((pw) => pw.y < CANVAS_H);
 
-      // Win condition
-      if (worldY + advance >= GOAL_DISTANCE) {
+      // Win condition (distance along path or fallback)
+      if (worldY + advance >= goalDistance) {
         const startedAt =
           (state.status === "running" ? state.startedAt : ts) || ts;
         const durationMs = Math.max(0, ts - startedAt);
@@ -346,8 +410,25 @@ export default function GameCanvas() {
       // Draw
       ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
-      // Background: image if available, else gradient
-      if (bgImg.complete && bgImg.naturalWidth > 0) {
+      // Background: follow route if ready; else fallback to vertical tile
+      if (bgImg.complete && bgImg.naturalWidth > 0 && routeRef.current) {
+        const scale = CANVAS_W / bgImg.naturalWidth; // fit width
+        const srcW = Math.min(bgImg.naturalWidth, CANVAS_W / scale);
+        const srcH = Math.min(bgImg.naturalHeight, CANVAS_H / scale);
+        const cam = getPointAt(worldY) ?? {
+          x: bgImg.naturalWidth / 2,
+          y: bgImg.naturalHeight / 2,
+        };
+        const sx = Math.max(
+          0,
+          Math.min(bgImg.naturalWidth - srcW, cam.x - srcW / 2),
+        );
+        const sy = Math.max(
+          0,
+          Math.min(bgImg.naturalHeight - srcH, cam.y - srcH / 2),
+        );
+        ctx.drawImage(bgImg, sx, sy, srcW, srcH, 0, 0, CANVAS_W, CANVAS_H);
+      } else if (bgImg.complete && bgImg.naturalWidth > 0) {
         // tile vertically using worldY as offset
         const imgH = (CANVAS_W / bgImg.naturalWidth) * bgImg.naturalHeight;
         const offset = (worldY % imgH) - imgH;
@@ -393,7 +474,7 @@ export default function GameCanvas() {
       ctx.fillStyle = "#ffffff";
       ctx.font = "16px monospace";
       ctx.fillText(
-        `Score: ${score}  Power: ${powerLevel}  Dist: ${Math.floor(worldY)}/${GOAL_DISTANCE}`,
+        `Score: ${score}  Power: ${powerLevel}  Dist: ${Math.floor(worldY)}/${goalDistance}`,
         12,
         22,
       );
@@ -404,7 +485,7 @@ export default function GameCanvas() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [fire, score, powerLevel, worldY, state.status],
+    [fire, score, powerLevel, worldY, state.status, goalDistance, getPointAt],
   );
 
   // Game loop control
