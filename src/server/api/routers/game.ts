@@ -64,12 +64,34 @@ export const gameRouter = createTRPCRouter({
 
       const promptEn = `You are a data analyst. Using only the JSON rows (subset from a CSV) as hints, write 1–2 sentences with a plausible cause for why the player crashed into an obstacle in the game. Keep it concise, no real-world advice.\n\nGame: score=${input.score}, duration=${Math.round(input.durationMs / 1000)}s, distance=${input.distance ?? 0}, power=${input.powerLevel ?? 1}\nRows(JSON): ${contextJson}`;
 
-      const answer = await invokeAnthropicMessages({
-        prompt: input.language === "ja" ? promptJa : promptEn,
-        maxTokens: 300,
-        temperature: 0.4,
-      });
+      // Call Bedrock with a graceful fallback in case local AWS auth is missing/expired.
+      let cause: string;
+      try {
+        const answer = await invokeAnthropicMessages({
+          prompt: input.language === "ja" ? promptJa : promptEn,
+          maxTokens: 300,
+          temperature: 0.4,
+        });
+        cause = answer.trim();
+      } catch (err) {
+        // Avoid crashing tRPC in development when AWS creds are not configured.
+        const msg = err instanceof Error ? err.message : String(err);
+        const tokenExpired = /bearer token has expired|token has expired/i.test(
+          msg,
+        );
+        const accessDenied =
+          /accessdenied|unauthorized|notauthorized|unrecognizedclient/i.test(
+            msg,
+          );
+        const hint = tokenExpired
+          ? "（AWS SSOの有効期限が切れています）"
+          : accessDenied
+            ? "（AWS認証/権限エラー）"
+            : "";
+        console.error("[TRPC] game.analyzeCrash Bedrock error:", msg);
+        cause = `原因の推定に失敗しました。${hint}`;
+      }
 
-      return { cause: answer.trim(), usedRows: selections.length };
+      return { cause, usedRows: selections.length };
     }),
 });
