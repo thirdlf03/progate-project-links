@@ -582,11 +582,13 @@ export default function GameCanvas() {
             {!state.win && (
               <div className="mx-auto mb-4 max-w-md text-left text-sm text-zinc-200">
                 <p className="mb-1 font-semibold">推定された事故原因</p>
-                <div className="rounded-md bg-zinc-800 px-3 py-2">
+                <div className="max-h-[50svh] overflow-y-auto rounded-md bg-zinc-800 px-3 py-2">
                   {causeLoading ? (
                     <span>事故原因を推定中...</span>
                   ) : (
-                    <span>{crashCause ?? "(なし)"}</span>
+                    <span className="break-words whitespace-pre-wrap">
+                      {crashCause ?? "(なし)"}
+                    </span>
                   )}
                 </div>
               </div>
