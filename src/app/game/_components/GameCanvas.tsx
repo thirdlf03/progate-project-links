@@ -44,6 +44,11 @@ const tryLoadImage = (src: string) => {
 // Prefer PNG; .jpg/.jpeg kept as secondary fallbacks
 const bgCandidates = ["/maps/map1.png", "/maps/map1.jpg", "/maps/map1.jpeg"];
 
+const GRID_SIZE = 8;
+const TOTAL_TILES = GRID_SIZE * GRID_SIZE;
+// Camera traverses tiles slowly for smoother transitions (tiles/second)
+const CAMERA_SPEED = 0.15;
+
 export default function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -98,6 +103,33 @@ export default function GameCanvas() {
     const candidate = bgCandidates.find((s) => !!s) ?? "/maps/map1.png";
     return tryLoadImage(candidate);
   }, []);
+
+  // Tile system state for boustrophedon background
+  const [currentTileIndex, setCurrentTileIndex] = useState(0);
+  const tilesRef = useRef<HTMLImageElement[]>([]);
+  const tileStartTimeRef = useRef<number>(0);
+
+  // Load all 64 tile images once
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const tiles: HTMLImageElement[] = [];
+    for (let i = 0; i < TOTAL_TILES; i++) {
+      const tileIndex = String(i).padStart(2, "0");
+      const img = new Image();
+      img.src = `/maps/tiles/tile_${tileIndex}.png`;
+      tiles.push(img);
+    }
+    tilesRef.current = tiles;
+  }, []);
+
+  // Convert linear tile index to boustrophedon position (serpentine)
+  const getTilePosition = (index: number) => {
+    const row = Math.floor(index / GRID_SIZE);
+    const col = index % GRID_SIZE;
+    const isEvenRow = row % 2 === 0;
+    const actualCol = isEvenRow ? col : GRID_SIZE - 1 - col;
+    return { row, col: actualCol } as const;
+  };
 
   // Resolve room from query (?room=xxx) on mount and hold an input state until start
   const initialRoom = useMemo(() => {
@@ -336,6 +368,9 @@ export default function GameCanvas() {
     bulletsRef.current = [];
     obstaclesRef.current = [];
     powersRef.current = [];
+    // Reset tile traversal state
+    setCurrentTileIndex(0);
+    tileStartTimeRef.current = 0;
   }, []);
 
   const DEFAULT_CODE_KEYMAP = useMemo(
@@ -559,8 +594,78 @@ export default function GameCanvas() {
       // Draw
       ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
+      // Prefer boustrophedon 8x8 tile background if tiles are available
+      let usingTiles = false;
+      if (tilesRef.current.length > 0 && state.status === "running") {
+        if (!tileStartTimeRef.current) tileStartTimeRef.current = ts;
+        const elapsedSec = (ts - tileStartTimeRef.current) / 1000;
+        const totalProgress = elapsedSec * CAMERA_SPEED; // tiles/sec
+        const currentTileFloat = totalProgress % TOTAL_TILES;
+        const currentIdx = Math.floor(currentTileFloat);
+        const nextIdx = (currentIdx + 1) % TOTAL_TILES;
+        const progress = currentTileFloat - currentIdx; // [0,1)
+
+        if (currentIdx !== currentTileIndex) setCurrentTileIndex(currentIdx);
+
+        const currentPos = getTilePosition(currentIdx);
+        const nextPos = getTilePosition(nextIdx);
+        let cameraOffsetX = 0;
+        let cameraOffsetY = 0;
+        if (currentPos.row === nextPos.row) {
+          // horizontal within row
+          const direction = currentPos.row % 2 === 0 ? 1 : -1;
+          cameraOffsetX = -direction * CANVAS_W * progress;
+        } else {
+          // vertical to next row
+          cameraOffsetY = -CANVAS_H * progress;
+        }
+
+        const currentTile = tilesRef.current[currentIdx];
+        if (currentTile?.complete) {
+          ctx.drawImage(
+            currentTile,
+            0,
+            0,
+            currentTile.naturalWidth,
+            currentTile.naturalHeight,
+            cameraOffsetX,
+            cameraOffsetY,
+            CANVAS_W,
+            CANVAS_H,
+          );
+          usingTiles = true;
+        }
+        const nextTile = tilesRef.current[nextIdx];
+        if (nextTile?.complete && progress > 0) {
+          let nextX = cameraOffsetX;
+          let nextY = cameraOffsetY;
+          if (currentPos.row === nextPos.row) {
+            const direction = currentPos.row % 2 === 0 ? 1 : -1;
+            nextX = cameraOffsetX + direction * CANVAS_W;
+          } else {
+            nextY = cameraOffsetY + CANVAS_H;
+          }
+          ctx.drawImage(
+            nextTile,
+            0,
+            0,
+            nextTile.naturalWidth,
+            nextTile.naturalHeight,
+            nextX,
+            nextY,
+            CANVAS_W,
+            CANVAS_H,
+          );
+        }
+      }
+
       // Background: follow route if ready; else fallback to vertical tile
-      if (bgImg.complete && bgImg.naturalWidth > 0 && routeRef.current) {
+      if (
+        !usingTiles &&
+        bgImg.complete &&
+        bgImg.naturalWidth > 0 &&
+        routeRef.current
+      ) {
         // Choose a viewport smaller than the image to allow panning in both axes.
         const viewportFrac = 0.45; // portion of the image width used for the viewport
         const srcW = Math.max(
@@ -590,7 +695,7 @@ export default function GameCanvas() {
           Math.min(bgImg.naturalHeight - srcH, cam.y - srcH / 2),
         );
         ctx.drawImage(bgImg, sx, sy, srcW, srcH, 0, 0, CANVAS_W, CANVAS_H);
-      } else if (bgImg.complete && bgImg.naturalWidth > 0) {
+      } else if (!usingTiles && bgImg.complete && bgImg.naturalWidth > 0) {
         // tile vertically using worldY as offset
         const imgH = (CANVAS_W / bgImg.naturalWidth) * bgImg.naturalHeight;
         const offset = (worldY % imgH) - imgH;
@@ -607,7 +712,7 @@ export default function GameCanvas() {
             Math.floor(imgH),
           );
         }
-      } else {
+      } else if (!usingTiles) {
         const grd = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
         grd.addColorStop(0, "#082032");
         grd.addColorStop(1, "#2C394B");
@@ -635,11 +740,19 @@ export default function GameCanvas() {
       // HUD
       ctx.fillStyle = "#ffffff";
       ctx.font = "16px monospace";
-      ctx.fillText(
-        `Score: ${score}  Power: ${powerLevel}  Dist: ${Math.floor(worldY)}/${goalDistance}`,
-        12,
-        22,
-      );
+      if (usingTiles) {
+        ctx.fillText(
+          `Score: ${score}  Power: ${powerLevel}  Tile: ${currentTileIndex + 1}/${TOTAL_TILES}`,
+          12,
+          22,
+        );
+      } else {
+        ctx.fillText(
+          `Score: ${score}  Power: ${powerLevel}  Dist: ${Math.floor(worldY)}/${goalDistance}`,
+          12,
+          22,
+        );
+      }
 
       // Continue loop if still running
       if (state.status === "running") {
@@ -705,8 +818,12 @@ export default function GameCanvas() {
     } catch {}
     // Connect to mobile controller WS at game start
     connectWS();
-    setState({ status: "running", startedAt: performance.now() });
+    const now = performance.now();
+    setState({ status: "running", startedAt: now });
     submittedRef.current = false;
+    // Initialize tile traversal
+    setCurrentTileIndex(0);
+    tileStartTimeRef.current = now;
   };
 
   // Track WS connection status for UI and gating
