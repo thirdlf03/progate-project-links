@@ -57,9 +57,10 @@ export default function GameCanvas() {
   const wsAxRef = useRef(0); // normalized [-1,1] from gamma
   const wsAyRef = useRef(0); // normalized [-1,1] from beta
   const roomRef = useRef<string>("default");
-  const [wsStatus, setWsStatus] = useState<
-    "idle" | "connecting" | "connected" | "error"
-  >("idle");
+  // internal ws status (not rendered)
+  const wsStatusRef = useRef<"idle" | "connecting" | "connected" | "error">(
+    "idle",
+  );
 
   const [state, setState] = useState<GameState>({ status: "init" });
   // Start viewing from the bottom of the background image so it feels like "climbing up".
@@ -140,7 +141,7 @@ export default function GameCanvas() {
     } catch {}
     wsRef.current = null;
     wsConnectedRef.current = false;
-    setWsStatus("connecting");
+    wsStatusRef.current = "connecting";
 
     // Prefer explicit env override, else derive from current origin
     const envUrl = process.env.NEXT_PUBLIC_TILT_WS_URL;
@@ -150,10 +151,11 @@ export default function GameCanvas() {
         : (() => {
             if (typeof window === "undefined") return "";
             const scheme = window.location.protocol === "https:" ? "wss" : "ws";
-            return `${scheme}://${window.location.host}`;
+            // default to separate WS server on :3010 to avoid port clash with Next
+            return `${scheme}://${window.location.hostname}:3010`;
           })();
     if (!url) {
-      setWsStatus("error");
+      wsStatusRef.current = "error";
       return;
     }
 
@@ -161,14 +163,14 @@ export default function GameCanvas() {
     try {
       sock = new WebSocket(url);
     } catch {
-      setWsStatus("error");
+      wsStatusRef.current = "error";
       return;
     }
 
     wsRef.current = sock;
 
     const onOpen = () => {
-      setWsStatus("connected");
+      wsStatusRef.current = "connected";
       wsConnectedRef.current = true;
       // Join as viewer in the selected room (same contract as smartphone-controller)
       const room = roomRef.current || "default";
@@ -178,15 +180,17 @@ export default function GameCanvas() {
     };
     const onCloseOrError = () => {
       wsConnectedRef.current = false;
-      setWsStatus("error");
+      wsStatusRef.current = "error";
     };
     const onMessage = (ev: MessageEvent) => {
       try {
         const raw = JSON.parse(String(ev.data)) as unknown;
         if (!raw || typeof raw !== "object") return;
         const anyObj = raw as Record<string, unknown>;
-        const typeField = typeof anyObj.type === "string" ? anyObj.type : undefined;
-        const roomField = typeof anyObj.room === "string" ? anyObj.room : undefined;
+        const typeField =
+          typeof anyObj.type === "string" ? anyObj.type : undefined;
+        const roomField =
+          typeof anyObj.room === "string" ? anyObj.room : undefined;
         if (roomField && roomField !== (roomRef.current || "default")) return;
 
         if (typeField === "orient") {
