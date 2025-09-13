@@ -7,9 +7,11 @@ import { createCallerFactory, createTRPCRouter } from "~/server/api/trpc";
  *
  * All routers added in /api/routers should be manually added here.
  */
+import { keymapRouter } from "~/server/api/routers/keymap";
 export const appRouter = createTRPCRouter({
   post: postRouter,
   game: gameRouter,
+  keymap: keymapRouter,
 });
 
 // export type definition of API
