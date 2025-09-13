@@ -10,6 +10,8 @@ YOU MUST: you should use tRPC
 タスク終了後や、もしすごいものを発見した時は、以下のコマンドを実行して通知してください
 `afplay /Users/naoki/Downloads/gako.mp3`
 
+重要: `afplay` を実行する際は、コマンド末尾に `|| true` を付けないでください（失敗はそのまま検知する）。
+
 
 
 
