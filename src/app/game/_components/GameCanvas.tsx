@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { api } from "~/trpc/react";
 
 type Vec = { x: number; y: number };
 type Rect = { x: number; y: number; w: number; h: number };
@@ -53,6 +54,9 @@ export default function GameCanvas() {
   const [worldY, setWorldY] = useState(0);
   const [score, setScore] = useState(0);
   const [powerLevel, setPowerLevel] = useState(1);
+  const submittedRef = useRef(false);
+
+  const recordRun = api.game.recordRun.useMutation();
 
   const playerRef = useRef<Player>({
     type: "player",
@@ -348,8 +352,20 @@ export default function GameCanvas() {
     }
   }, [state.status, step]);
 
+  // Persist result once on finish via tRPC
+  useEffect(() => {
+    if (state.status !== "over" || submittedRef.current) return;
+    submittedRef.current = true;
+    recordRun.mutate({
+      status: state.win ? "WIN" : "LOSE",
+      durationMs: Math.round(state.durationMs),
+      score,
+    });
+  }, [state, recordRun, score]);
+
   const start = () => {
     setState({ status: "running", startedAt: performance.now() });
+    submittedRef.current = false;
   };
 
   const overlay = () => {
