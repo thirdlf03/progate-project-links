@@ -1,6 +1,7 @@
 YOU MUST: Check the format and linter every time you edit the code.
 YOU MUST: Follow the development flow using Serena.
 YOU MUST: Use git to commit in the smallest possible units.
+YOU MUST: you should use tRPC
 
 ## About Serena MCP Tools
 
