@@ -59,15 +59,17 @@ export const gameRouter = createTRPCRouter({
 
       const selections = selectRelevantRows(rows, baseQuestion, 20);
       const contextJson = toCompactJson(selections);
+      console.log(contextJson);
 
-      const prompt = `CSV ${contextJson}をもとに、やけにリアルな事故原因を1つ考えてください。その後、再発防止策まで提示すること`;
+      const prompt = `${contextJson}の情報をもとに、事故原因はこれだとでっちあげでもいいので発言してください。その類似事故を、${contextJson}から一つあげてください。その後、再発防止策まで提示すること。`;
 
       // Call Bedrock with a graceful fallback in case local AWS auth is missing/expired.
       let cause: string;
       try {
         const answer = await invokeAnthropicMessages({
           prompt,
-          maxTokens: 300,
+          // Increase to avoid premature cutoffs in Japanese outputs
+          maxTokens: 1200,
           temperature: 0.4,
         });
         cause = answer.trim();
