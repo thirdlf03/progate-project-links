@@ -1,6 +1,3 @@
-// Thin Bedrock Runtime wrapper (Anthropic-style messages)
-// Note: requires @aws-sdk/client-bedrock-runtime at runtime.
-
 import { env } from "~/env.js";
 
 type InvokeModelInput = {
@@ -44,52 +41,89 @@ export async function invokeAnthropicMessages(options: {
   maxTokens?: number;
 }): Promise<string> {
   const modelId =
-    options.modelId ??
-    process.env.BEDROCK_MODEL_ID ??
-    "anthropic.claude-3-5-sonnet-20240620-v1:0";
+    options.modelId ?? process.env.BEDROCK_MODEL_ID ?? "amazon.nova-micro-v1:0";
   const temperature = options.temperature ?? 0.2;
   const maxTokens = options.maxTokens ?? 1024;
-  const body = JSON.stringify({
-    anthropic_version: "bedrock-2023-05-31",
-    temperature,
-    max_tokens: maxTokens,
-    messages: [
-      {
-        role: "user",
-        content: [
+
+  // Nova models use different format
+  const isNova = modelId.includes("nova");
+  const body = isNova
+    ? JSON.stringify({
+        messages: [
           {
-            type: "text",
-            text: options.prompt,
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: options.prompt,
+              },
+            ],
           },
         ],
-      },
-    ],
-  });
+        inferenceConfig: {
+          temperature,
+          max_new_tokens: maxTokens,
+        },
+      })
+    : JSON.stringify({
+        anthropic_version: "bedrock-2023-05-31",
+        temperature,
+        max_tokens: maxTokens,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: options.prompt,
+              },
+            ],
+          },
+        ],
+      });
 
-  const client = await getClient();
-  const { InvokeModelCommand } = await getBedrockModule();
-  const res = await client.send(
-    new InvokeModelCommand({
-      modelId,
-      body,
-      contentType: "application/json",
-      accept: "application/json",
-    }),
-  );
-
-  const text = Buffer.from(res.body).toString("utf8");
   try {
-    const json = JSON.parse(text) as {
-      content?: { type: string; text?: string }[];
-      completion?: string;
-    };
-    if (json.content && json.content.length > 0) {
-      const [first] = json.content;
-      if (first && typeof first.text === "string") return first.text;
+    const client = await getClient();
+    const { InvokeModelCommand } = await getBedrockModule();
+    const res = await client.send(
+      new InvokeModelCommand({
+        modelId,
+        body,
+        contentType: "application/json",
+        accept: "application/json",
+      }),
+    );
+
+    const text = Buffer.from(res.body).toString("utf8");
+    try {
+      const json = JSON.parse(text) as {
+        content?: { type: string; text?: string }[];
+        completion?: string;
+        output?: { message?: { content?: { text?: string }[] } };
+      };
+
+      // Nova format
+      if (json.output?.message?.content?.[0]?.text) {
+        return json.output.message.content[0].text;
+      }
+
+      // Anthropic format
+      if (json.content && json.content.length > 0) {
+        const [first] = json.content;
+        if (first && typeof first.text === "string") return first.text;
+      }
+
+      if (typeof json.completion === "string") return json.completion;
+      return text;
+    } catch {
+      return text;
     }
-    if (typeof json.completion === "string") return json.completion;
-    return text;
-  } catch {
-    return text;
+  } catch (error) {
+    // Fallback for when Bedrock is not accessible
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes("AccessDenied") || msg.includes("don't have access")) {
+      return "申し訳ございませんが、現在AIモデルにアクセスできません。Bedrockのモデルアクセス許可を有効にしてください。";
+    }
+    throw error;
   }
 }
