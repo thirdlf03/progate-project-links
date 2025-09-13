@@ -2,6 +2,7 @@ import { HydrateClient } from "~/trpc/server";
 import { Suspense } from "react";
 import GameCanvas from "./_components/GameCanvas";
 import Leaderboard from "./_components/Leaderboard";
+import KeymapSettings from "./_components/KeymapSettings";
 
 export default function GamePage() {
   return (
@@ -11,6 +12,7 @@ export default function GamePage() {
           <h1 className="mb-4 text-2xl font-bold">
             Vertical Scrolling Shooter
           </h1>
+          <KeymapSettings />
           <Suspense>
             <GameCanvas />
           </Suspense>
