@@ -3,6 +3,16 @@ YOU MUST: Follow the development flow using Serena.
 YOU MUST: Use git to commit in the smallest possible units.
 YOU MUST: you should use tRPC
 
+## notification
+タスクを開始したり、ユーザーの認証がいる時は以下のコマンドを実行して、ユーザーに知らせてください。
+`afplay /Users/naoki/Downloads/reba.mp3`
+
+タスク終了後や、もしすごいものを発見した時は、以下のコマンドを実行して通知してください
+`afplay /Users/naoki/Downloads/gako.mp3`
+
+
+
+
 ## About Serena MCP Tools
 
 Serena MCP is a semantic coding tool that enables efficient analysis and editing of codebases. It understands project structure and provides precise symbol-level operations (classes, functions, variables, etc.).
