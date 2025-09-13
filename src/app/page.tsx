@@ -42,6 +42,15 @@ export default async function Home() {
                 to deploy it.
               </div>
             </Link>
+            <Link
+              className="flex max-w-xs flex-col gap-4 rounded-xl bg-white/10 p-4 hover:bg-white/20"
+              href="/game"
+            >
+              <h3 className="text-2xl font-bold">Play the Shooter →</h3>
+              <div className="text-lg">
+                Vertical scrolling shooter demo page.
+              </div>
+            </Link>
           </div>
           <div className="flex flex-col items-center gap-2">
             <p className="text-2xl text-white">
