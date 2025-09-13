@@ -474,12 +474,12 @@ export default function GameCanvas() {
   };
 
   return (
-    <div className="relative">
+    <div className="relative h-[100svh] w-[100vw] overflow-hidden">
       <canvas
         ref={canvasRef}
         width={CANVAS_W}
         height={CANVAS_H}
-        className="mx-auto block rounded bg-black shadow-lg"
+        className="block h-full w-full touch-none bg-black select-none"
       />
       {overlay()}
       <p className="mt-3 text-sm text-zinc-300">
