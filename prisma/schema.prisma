@@ -64,6 +64,7 @@ model User {
   sessions      Session[]
   posts         Post[]
   runs          Run[]
+  keymap        Keymap?
 }
 
 model VerificationToken {
@@ -90,4 +91,15 @@ model Run {
 
     @@index([createdAt])
     @@index([score, durationMs])
+}
+
+/// Per-user key mapping preferences for the game
+model Keymap {
+  /// one-to-one with User
+  userId    String  @id
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// KeyboardEvent.code values grouped by action
+  mapping   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
