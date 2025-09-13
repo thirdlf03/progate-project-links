@@ -51,6 +51,16 @@ export default function GameCanvas() {
   const keysRef = useRef<Record<string, boolean>>({});
   const lastShotRef = useRef<number>(0);
 
+  // --- WebSocket (mobile tilt controller) ---
+  const wsRef = useRef<WebSocket | null>(null);
+  const wsConnectedRef = useRef(false);
+  const wsAxRef = useRef(0); // normalized [-1,1] from gamma
+  const wsAyRef = useRef(0); // normalized [-1,1] from beta
+  const roomRef = useRef<string>("default");
+  const [wsStatus, setWsStatus] = useState<
+    "idle" | "connecting" | "connected" | "error"
+  >("idle");
+
   const [state, setState] = useState<GameState>({ status: "init" });
   // Start viewing from the bottom of the background image so it feels like "climbing up".
   const [worldY, setWorldY] = useState(CANVAS_H);
@@ -83,6 +93,143 @@ export default function GameCanvas() {
     const candidate = bgCandidates.find((s) => !!s) ?? "/maps/map1.png";
     return tryLoadImage(candidate);
   }, []);
+
+  // Resolve room from query (?room=xxx) on mount
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const r = (params.get("room") ?? "default").trim();
+      roomRef.current = r || "default";
+    } catch {
+      roomRef.current = "default";
+    }
+  }, []);
+
+  // Fire bullets; used by keyboard and WS 'shoot' events
+  const fire = useCallback(
+    (now: number) => {
+      if (now - lastShotRef.current < FIRE_RATE_MS) return;
+      lastShotRef.current = now;
+      const p = playerRef.current;
+
+      const spread = Math.min(powerLevel - 1, 3); // up to 3 side bullets
+      const bullets: Bullet[] = [];
+      for (let i = -spread; i <= spread; i++) {
+        const offsetX = i * 10;
+        bullets.push({
+          type: "bullet",
+          x: p.x + p.w / 2 - BULLET_SIZE.x / 2 + offsetX,
+          y: p.y - BULLET_SIZE.y,
+          w: BULLET_SIZE.x,
+          h: BULLET_SIZE.y,
+          vx: 0,
+          vy: -BULLET_SPEED,
+          speed: BULLET_SPEED,
+        });
+      }
+      bulletsRef.current.push(...bullets);
+    },
+    [powerLevel],
+  );
+
+  // Helper to connect to the same WS as the mobile controller (smartphone-controller)
+  const connectWS = useCallback(() => {
+    // Close existing
+    try {
+      wsRef.current?.close();
+    } catch {}
+    wsRef.current = null;
+    wsConnectedRef.current = false;
+    setWsStatus("connecting");
+
+    // Prefer explicit env override, else derive from current origin
+    const envUrl = process.env.NEXT_PUBLIC_TILT_WS_URL;
+    const url =
+      envUrl && envUrl.length > 0
+        ? envUrl
+        : (() => {
+            if (typeof window === "undefined") return "";
+            const scheme = window.location.protocol === "https:" ? "wss" : "ws";
+            return `${scheme}://${window.location.host}`;
+          })();
+    if (!url) {
+      setWsStatus("error");
+      return;
+    }
+
+    let sock: WebSocket | null = null;
+    try {
+      sock = new WebSocket(url);
+    } catch {
+      setWsStatus("error");
+      return;
+    }
+
+    wsRef.current = sock;
+
+    const onOpen = () => {
+      setWsStatus("connected");
+      wsConnectedRef.current = true;
+      // Join as viewer in the selected room (same contract as smartphone-controller)
+      const room = roomRef.current || "default";
+      try {
+        sock?.send(JSON.stringify({ type: "join", role: "viewer", room }));
+      } catch {}
+    };
+    const onCloseOrError = () => {
+      wsConnectedRef.current = false;
+      setWsStatus("error");
+    };
+    const onMessage = (ev: MessageEvent) => {
+      try {
+        const raw = JSON.parse(String(ev.data)) as unknown;
+        if (!raw || typeof raw !== "object") return;
+        const anyObj = raw as Record<string, unknown>;
+        const typeField = typeof anyObj.type === "string" ? anyObj.type : undefined;
+        const roomField = typeof anyObj.room === "string" ? anyObj.room : undefined;
+        if (roomField && roomField !== (roomRef.current || "default")) return;
+
+        if (typeField === "orient") {
+          // Map gamma/beta to normalized axes like viewer.html
+          const clamp = (v: number, a: number, b: number) =>
+            Math.max(a, Math.min(b, v));
+          const gamma =
+            typeof anyObj.gamma === "number"
+              ? anyObj.gamma
+              : Number(anyObj.gamma ?? 0) || 0;
+          const beta =
+            typeof anyObj.beta === "number"
+              ? anyObj.beta
+              : Number(anyObj.beta ?? 0) || 0;
+          const nX = clamp(gamma / 30, -1, 1);
+          const nY = clamp(beta / 30, -1, 1);
+          wsAxRef.current = nX;
+          wsAyRef.current = nY;
+        } else if (typeField === "shoot") {
+          // Fire immediately on shoot event
+          fire(performance.now());
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    sock.addEventListener("open", onOpen);
+    sock.addEventListener("close", onCloseOrError);
+    sock.addEventListener("error", onCloseOrError);
+    sock.addEventListener("message", onMessage);
+
+    // Teardown on change/unmount
+    return () => {
+      sock.removeEventListener("open", onOpen);
+      sock.removeEventListener("close", onCloseOrError);
+      sock.removeEventListener("error", onCloseOrError);
+      sock.removeEventListener("message", onMessage);
+      try {
+        sock.close();
+      } catch {}
+    };
+  }, [fire]);
 
   // --- Route & camera setup (serpentine) ---
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
@@ -265,31 +412,7 @@ export default function GameCanvas() {
     };
   }, [codeSets]);
 
-  const fire = useCallback(
-    (now: number) => {
-      if (now - lastShotRef.current < FIRE_RATE_MS) return;
-      lastShotRef.current = now;
-      const p = playerRef.current;
-
-      const spread = Math.min(powerLevel - 1, 3); // up to 3 side bullets
-      const bullets: Bullet[] = [];
-      for (let i = -spread; i <= spread; i++) {
-        const offsetX = i * 10;
-        bullets.push({
-          type: "bullet",
-          x: p.x + p.w / 2 - BULLET_SIZE.x / 2 + offsetX,
-          y: p.y - BULLET_SIZE.y,
-          w: BULLET_SIZE.x,
-          h: BULLET_SIZE.y,
-          vx: 0,
-          vy: -BULLET_SPEED,
-          speed: BULLET_SPEED,
-        });
-      }
-      bulletsRef.current.push(...bullets);
-    },
-    [powerLevel],
-  );
+  // (fire defined above)
 
   // Spawn helpers
   const spawnObstacle = (y: number) => {
@@ -337,10 +460,16 @@ export default function GameCanvas() {
         "w" | "a" | "s" | "d" | "space",
         boolean
       >;
-      if (k.w) ay -= 1;
-      if (k.s) ay += 1;
-      if (k.a) ax -= 1;
-      if (k.d) ax += 1;
+      // Prefer mobile tilt axes if connected; otherwise fall back to keys
+      if (wsConnectedRef.current) {
+        ax = wsAxRef.current;
+        ay = wsAyRef.current;
+      } else {
+        if (k.w) ay -= 1;
+        if (k.s) ay += 1;
+        if (k.a) ax -= 1;
+        if (k.d) ax += 1;
+      }
       const len = Math.hypot(ax, ay) || 1;
       const spd = p.speed;
       p.vx = (ax / len) * spd;
@@ -549,6 +678,8 @@ export default function GameCanvas() {
   const start = () => {
     // Ensure clean input state when starting
     keysRef.current = {};
+    // Connect to mobile controller WS at game start
+    connectWS();
     setState({ status: "running", startedAt: performance.now() });
     submittedRef.current = false;
   };
