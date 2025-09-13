@@ -51,7 +51,8 @@ export default function GameCanvas() {
   const lastShotRef = useRef<number>(0);
 
   const [state, setState] = useState<GameState>({ status: "init" });
-  const [worldY, setWorldY] = useState(0);
+  // Start viewing from the bottom of the background image so it feels like "climbing up".
+  const [worldY, setWorldY] = useState(CANVAS_H);
   const [score, setScore] = useState(0);
   const [powerLevel, setPowerLevel] = useState(1);
   const submittedRef = useRef(false);
@@ -84,7 +85,8 @@ export default function GameCanvas() {
 
   const reset = useCallback(() => {
     setState({ status: "init" });
-    setWorldY(0);
+    // Reset to show the bottom of the image again at restart
+    setWorldY(CANVAS_H);
     setScore(0);
     setPowerLevel(1);
     // Clear input state to avoid stuck keys between runs
