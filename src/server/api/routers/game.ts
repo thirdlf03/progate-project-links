@@ -1,6 +1,12 @@
 import { z } from "zod";
 
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+import {
+  loadAccidentCsv,
+  selectRelevantRows,
+  toCompactJson,
+} from "~/server/services/csv/accident";
+import { invokeAnthropicMessages } from "~/server/bedrock/client";
 
 export const gameRouter = createTRPCRouter({
   recordRun: publicProcedure
@@ -32,4 +38,38 @@ export const gameRouter = createTRPCRouter({
     });
     return top;
   }),
+
+  analyzeCrash: publicProcedure
+    .input(
+      z.object({
+        score: z.number().int().nonnegative(),
+        durationMs: z.number().int().nonnegative(),
+        distance: z.number().int().nonnegative().optional(),
+        powerLevel: z.number().int().min(1).max(5).optional(),
+        language: z.enum(["ja", "en"]).default("ja"),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const rows = await loadAccidentCsv();
+
+      // Craft a question that is likely to match generic accident CSVs
+      const qTokensJa =
+        "事故 衝突 速度 不注意 視界 天候 路面 操作ミス 追突 回避 疲労";
+      const baseQuestion = `ゲームのプレイヤーは障害物に衝突してクラッシュしました。スコア:${input.score}、経過時間:${Math.round(input.durationMs / 1000)}秒、到達距離:${input.distance ?? 0}、パワー:${input.powerLevel ?? 1}。次のCSV行から示唆される要因を参考に、もっともらしい事故原因を1〜2文で日本語で推測してください。${qTokensJa}`;
+
+      const selections = selectRelevantRows(rows, baseQuestion, 20);
+      const contextJson = toCompactJson(selections);
+
+      const promptJa = `あなたはデータアナリストです。以下のJSON行（CSVの一部）を根拠として、ゲーム内でプレイヤーが障害物に衝突した「もっともらしい原因」を日本語で1〜2文で説明してください。推測であることを匂わせつつ、現実世界の助言は不要です。\n\nゲーム状況: スコア=${input.score}, 経過時間=${Math.round(input.durationMs / 1000)}秒, 距離=${input.distance ?? 0}, パワー=${input.powerLevel ?? 1}\n根拠データ(抜粋JSON): ${contextJson}`;
+
+      const promptEn = `You are a data analyst. Using only the JSON rows (subset from a CSV) as hints, write 1–2 sentences with a plausible cause for why the player crashed into an obstacle in the game. Keep it concise, no real-world advice.\n\nGame: score=${input.score}, duration=${Math.round(input.durationMs / 1000)}s, distance=${input.distance ?? 0}, power=${input.powerLevel ?? 1}\nRows(JSON): ${contextJson}`;
+
+      const answer = await invokeAnthropicMessages({
+        prompt: input.language === "ja" ? promptJa : promptEn,
+        maxTokens: 300,
+        temperature: 0.4,
+      });
+
+      return { cause: answer.trim(), usedRows: selections.length };
+    }),
 });
