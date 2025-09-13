@@ -43,7 +43,8 @@ export async function invokeAnthropicMessages(options: {
   const modelId =
     options.modelId ?? process.env.BEDROCK_MODEL_ID ?? "amazon.nova-micro-v1:0";
   const temperature = options.temperature ?? 0.2;
-  const maxTokens = options.maxTokens ?? 1024;
+  // Increase default to reduce mid-sentence truncation on longer answers
+  const maxTokens = options.maxTokens ?? 1500;
 
   // Nova models use different format
   const isNova = modelId.includes("nova");
