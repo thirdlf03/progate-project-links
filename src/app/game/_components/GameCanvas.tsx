@@ -57,6 +57,7 @@ export default function GameCanvas() {
   const submittedRef = useRef(false);
 
   const recordRun = api.game.recordRun.useMutation();
+  const { data: serverKeymap } = api.keymap.get.useQuery();
 
   const playerRef = useRef<Player>({
     type: "player",
@@ -103,27 +104,38 @@ export default function GameCanvas() {
     powersRef.current = [];
   }, []);
 
+  const DEFAULT_CODE_KEYMAP = useMemo(
+    () => ({
+      up: ["KeyW", "ArrowUp"],
+      down: ["KeyS", "ArrowDown"],
+      left: ["KeyA", "ArrowLeft"],
+      right: ["KeyD", "ArrowRight"],
+      shoot: ["Space"],
+    }),
+    [],
+  );
+
+  const codeSets = useMemo(() => {
+    const map = serverKeymap ?? DEFAULT_CODE_KEYMAP;
+    return {
+      up: new Set<string>(map.up as string[]),
+      down: new Set<string>(map.down as string[]),
+      left: new Set<string>(map.left as string[]),
+      right: new Set<string>(map.right as string[]),
+      shoot: new Set<string>(map.shoot as string[]),
+    } as const;
+  }, [serverKeymap, DEFAULT_CODE_KEYMAP]);
+
   // Input
   useEffect(() => {
     const mapCodeToKey = (e: KeyboardEvent): string | null => {
-      switch (e.code) {
-        case "KeyW":
-        case "ArrowUp":
-          return "w";
-        case "KeyA":
-        case "ArrowLeft":
-          return "a";
-        case "KeyS":
-        case "ArrowDown":
-          return "s";
-        case "KeyD":
-        case "ArrowRight":
-          return "d";
-        case "Space":
-          return "space";
-        default:
-          return null;
-      }
+      const c = e.code;
+      if (codeSets.up.has(c)) return "w";
+      if (codeSets.left.has(c)) return "a";
+      if (codeSets.down.has(c)) return "s";
+      if (codeSets.right.has(c)) return "d";
+      if (codeSets.shoot.has(c)) return "space";
+      return null;
     };
 
     const normalizeKey = (e: KeyboardEvent): string => {
@@ -136,11 +148,6 @@ export default function GameCanvas() {
         k.toLowerCase() === "spacebar"
       )
         return "space";
-      // Map arrow keys by key as a fallback too
-      if (k === "ArrowUp") return "w";
-      if (k === "ArrowLeft") return "a";
-      if (k === "ArrowDown") return "s";
-      if (k === "ArrowRight") return "d";
       return k.toLowerCase();
     };
 
@@ -186,7 +193,7 @@ export default function GameCanvas() {
       window.removeEventListener("blur", clearKeys);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, []);
+  }, [codeSets]);
 
   const fire = useCallback(
     (now: number) => {
