@@ -150,6 +150,7 @@ export default function GameCanvas() {
     wsRef.current = null;
     wsConnectedRef.current = false;
     wsStatusRef.current = "connecting";
+    setWsStatus("connecting");
 
     // Prefer explicit env override, else derive from current origin
     const envUrl = process.env.NEXT_PUBLIC_TILT_WS_URL;
@@ -164,6 +165,7 @@ export default function GameCanvas() {
           })();
     if (!url) {
       wsStatusRef.current = "error";
+      setWsStatus("error");
       return;
     }
 
@@ -172,6 +174,7 @@ export default function GameCanvas() {
       sock = new WebSocket(url);
     } catch {
       wsStatusRef.current = "error";
+      setWsStatus("error");
       return;
     }
 
@@ -180,6 +183,7 @@ export default function GameCanvas() {
     const onOpen = () => {
       wsStatusRef.current = "connected";
       wsConnectedRef.current = true;
+      setWsStatus("connected");
       // Join as viewer in the selected room (same contract as smartphone-controller)
       const room = roomRef.current || "default";
       try {
@@ -189,6 +193,7 @@ export default function GameCanvas() {
     const onCloseOrError = () => {
       wsConnectedRef.current = false;
       wsStatusRef.current = "error";
+      setWsStatus("error");
     };
     const onMessage = (ev: MessageEvent) => {
       try {
@@ -704,8 +709,38 @@ export default function GameCanvas() {
     submittedRef.current = false;
   };
 
+  // Track WS connection status for UI and gating
+  const [wsStatus, setWsStatus] = useState<typeof wsStatusRef.current>(
+    wsStatusRef.current,
+  );
+
+  // Try connecting to WS while on the start overlay
+  useEffect(() => {
+    if (state.status === "init" && wsStatusRef.current === "idle") {
+      connectWS();
+    }
+  }, [state.status, connectWS]);
   const overlay = () => {
-    if (state.status === "init")
+    if (state.status === "init") {
+      const dotClass =
+        wsStatus === "connected"
+          ? "bg-emerald-400"
+          : wsStatus === "connecting"
+            ? "bg-amber-400 animate-pulse"
+            : wsStatus === "error"
+              ? "bg-rose-500"
+              : "bg-zinc-400"; // idle
+      const statusText =
+        wsStatus === "connected"
+          ? "接続済み"
+          : wsStatus === "connecting"
+            ? "接続中..."
+            : wsStatus === "error"
+              ? "エラー"
+              : "未接続";
+
+      const canStart = wsStatus === "connected";
+
       return (
         <div className="absolute inset-0 grid place-items-center bg-black/60">
           <div className="w-[min(92vw,560px)] rounded-lg bg-zinc-900/80 p-6 text-center">
@@ -718,7 +753,7 @@ export default function GameCanvas() {
                 value={roomInput}
                 onChange={(e) => setRoomInput(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") start();
+                  if (e.key === "Enter" && canStart) start();
                 }}
                 placeholder="例: team-a"
                 className="w-full rounded-md border border-zinc-600 bg-zinc-800 px-3 py-2 text-white outline-none focus:ring-2 focus:ring-emerald-500"
@@ -729,20 +764,42 @@ export default function GameCanvas() {
                 になります。
               </p>
             </div>
+
+            <div className="mb-4 flex items-center justify-center gap-4 text-sm">
+              <div className="flex items-center gap-2">
+                <span
+                  className={`inline-block h-2.5 w-2.5 rounded-full ${dotClass}`}
+                />
+                <span className="text-zinc-200">WS接続: {statusText}</span>
+              </div>
+              <button
+                type="button"
+                onClick={connectWS}
+                className="rounded border border-zinc-600 px-2 py-1 text-xs text-zinc-200 hover:bg-zinc-800"
+              >
+                再接続
+              </button>
+            </div>
+
             <p className="mb-2">WASD or Arrow Keys: Move / Space: Shoot</p>
             <p className="mb-4 text-xs text-zinc-400">
               スマホ側URL:{" "}
               <code>/tilt/controller?room={normalizeRoom(roomInput)}</code>
             </p>
             <button
-              className="rounded bg-emerald-500 px-4 py-2 hover:bg-emerald-600"
+              className="rounded bg-emerald-500 px-4 py-2 hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
               onClick={start}
+              disabled={!canStart}
+              title={
+                !canStart ? "WebSocket未接続のため開始できません" : undefined
+              }
             >
               Game Start
             </button>
           </div>
         </div>
       );
+    }
     if (state.status === "over")
       return (
         <div className="absolute inset-0 grid place-items-center bg-black/60">
