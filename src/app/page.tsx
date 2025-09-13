@@ -51,6 +51,18 @@ export default async function Home() {
                 Vertical scrolling shooter demo page.
               </div>
             </Link>
+            {/* スマホ専用パネル */}
+            <Link
+              className="flex max-w-xs flex-col gap-4 rounded-xl bg-white/10 p-4 hover:bg-white/20"
+              href="/tilt/controller"
+            >
+              <h3 className="text-2xl font-bold">
+                スマホ専用 コントローラー →
+              </h3>
+              <div className="text-lg">
+                スマホから操作できるコントローラー画面に移動します。
+              </div>
+            </Link>
           </div>
           <div className="flex flex-col items-center gap-2">
             <p className="text-2xl text-white">
