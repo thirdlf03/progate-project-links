@@ -103,25 +103,43 @@ export default function GameCanvas() {
 
   // Input
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
+    const mapCodeToKey = (e: KeyboardEvent): string | null => {
+      switch (e.code) {
+        case "KeyW":
+          return "w";
+        case "KeyA":
+          return "a";
+        case "KeyS":
+          return "s";
+        case "KeyD":
+          return "d";
+        case "Space":
+          return "space";
+        default:
+          return null;
+      }
+    };
+
+    const normalizeKey = (e: KeyboardEvent): string => {
+      const mapped = mapCodeToKey(e);
+      if (mapped) return mapped;
       const k = e.key;
-      if ([" ", "Space", "Spacebar"].includes(k)) e.preventDefault();
-      const key =
+      if (
         k === " " ||
         k.toLowerCase() === "space" ||
         k.toLowerCase() === "spacebar"
-          ? "space"
-          : k.toLowerCase();
+      )
+        return "space";
+      return k.toLowerCase();
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      const key = normalizeKey(e);
+      if (key === "space") e.preventDefault();
       keysRef.current[key] = true;
     };
     const onKeyUp = (e: KeyboardEvent) => {
-      const k = e.key;
-      const key =
-        k === " " ||
-        k.toLowerCase() === "space" ||
-        k.toLowerCase() === "spacebar"
-          ? "space"
-          : k.toLowerCase();
+      const key = normalizeKey(e);
       keysRef.current[key] = false;
     };
     window.addEventListener("keydown", onKeyDown);
