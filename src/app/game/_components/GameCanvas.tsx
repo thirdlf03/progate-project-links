@@ -690,6 +690,27 @@ export default function GameCanvas() {
 
       // Entities are re-generated per tile each frame; no movement step here
 
+      // Collisions: bullets vs enemy (GIF)
+      {
+        const eRect: Rect = {
+          x: enemyPosRef.current.x,
+          y: enemyPosRef.current.y,
+          w: enemySizeRef.current,
+          h: enemySizeRef.current,
+        };
+        for (const b of bulletsRef.current) {
+          if (aabb(b, eRect)) {
+            // Remove bullet and grow enemy gradually
+            b.y = -100;
+            enemyTargetSizeRef.current = Math.min(
+              ENEMY_MAX_SIZE,
+              enemyTargetSizeRef.current + ENEMY_GROWTH_PER_HIT,
+            );
+            setScore((s) => s + 10);
+          }
+        }
+      }
+
       // Collisions: bullets vs obstacles
       for (const b of bulletsRef.current) {
         for (const o of obstaclesRef.current) {
