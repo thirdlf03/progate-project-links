@@ -41,6 +41,11 @@ export default async function Home() {
             </Link>
           </div>
         </div>
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-2xl text-white">
+          出典：「無人航空機飛行計画データ」（国土交通省）
+          </p>
+        </div>
       </main>
     </HydrateClient>
   );
