@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__serena__list_dir",
+      "mcp__serena__activate_project",
+      "Read(//Users/kyiku/progate-project-links/**)",
+      "Bash(npm run dev:*)",
+      "Bash(npm install)",
+      "Bash(cp:*)",
+      "Bash(cat:*)",
+      "Bash(lsof:*)",
+      "Bash(kill:*)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "serena"
+  ]
+}
