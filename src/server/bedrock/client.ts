@@ -55,7 +55,6 @@ export async function invokeAnthropicMessages(options: {
             role: "user",
             content: [
               {
-                type: "text",
                 text: options.prompt,
               },
             ],
@@ -63,7 +62,7 @@ export async function invokeAnthropicMessages(options: {
         ],
         inferenceConfig: {
           temperature,
-          max_new_tokens: maxTokens,
+          maxNewTokens: maxTokens,
         },
       })
     : JSON.stringify({
