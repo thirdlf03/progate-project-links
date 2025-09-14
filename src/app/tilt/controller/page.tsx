@@ -41,7 +41,7 @@ export default function TiltControllerPage() {
     return () => {
       try {
         wsRef.current?.close();
-      } catch {}
+      } catch { }
     };
   }, []);
 
@@ -93,7 +93,7 @@ export default function TiltControllerPage() {
     };
     try {
       sock.send(JSON.stringify(msg));
-    } catch {}
+    } catch { }
   }
 
   async function connect() {
@@ -105,7 +105,7 @@ export default function TiltControllerPage() {
     }
     try {
       wsRef.current?.close();
-    } catch {}
+    } catch { }
     setStatus("connecting");
     let sock: WebSocket | null = null;
     try {
@@ -125,7 +125,7 @@ export default function TiltControllerPage() {
             room: normalizeRoom(room),
           }),
         );
-      } catch {}
+      } catch { }
     });
     const onClose = () => setStatus("error");
     sock.addEventListener("close", onClose);
@@ -147,7 +147,7 @@ export default function TiltControllerPage() {
           t: Date.now(),
         }),
       );
-    } catch {}
+    } catch { }
   }
 
   return (
@@ -179,12 +179,6 @@ export default function TiltControllerPage() {
           className="rounded bg-blue-600 px-4 py-2 text-white"
         >
           接続して開始
-        </button>
-        <button
-          onClick={center}
-          className="rounded bg-zinc-600 px-4 py-2 text-white"
-        >
-          センタリング
         </button>
         <button
           onClick={shoot}
