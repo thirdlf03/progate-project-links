@@ -59,6 +59,10 @@ const CAMERA_SPEED = 0.15;
 
 export default function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  // Root container (covers the viewport) and an overlay aligned to the canvas
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+
   const rafRef = useRef<number | null>(null);
   const lastTsRef = useRef<number>(0);
   const keysRef = useRef<Record<string, boolean>>({});
@@ -1044,10 +1048,33 @@ export default function GameCanvas() {
       // Apply to DOM element directly to avoid re-render per frame
       const img = enemyImgRef.current;
       if (img) {
-        img.style.left = `${ex}px`;
-        img.style.top = `${ey}px`;
-        img.style.width = `${size}px`;
-        img.style.height = `${size}px`;
+        const root = rootRef.current;
+        const canvas = canvasRef.current;
+        const overlay = overlayRef.current;
+        if (root && canvas && overlay) {
+          const rootRect = root.getBoundingClientRect();
+          const canvasRect = canvas.getBoundingClientRect();
+          // Position the overlay exactly over the rendered canvas area
+          overlay.style.position = "absolute";
+          overlay.style.left = `${canvasRect.left - rootRect.left}px`;
+          overlay.style.top = `${canvasRect.top - rootRect.top}px`;
+          overlay.style.width = `${canvasRect.width}px`;
+          overlay.style.height = `${canvasRect.height}px`;
+          overlay.style.overflow = "hidden";
+          // Scale sprite from logical canvas coords to displayed pixels
+          const scaleX = canvasRect.width / CANVAS_W;
+          const scaleY = canvasRect.height / CANVAS_H;
+          img.style.left = `${ex * scaleX}px`;
+          img.style.top = `${ey * scaleY}px`;
+          img.style.width = `${size * scaleX}px`;
+          img.style.height = `${size * scaleY}px`;
+        } else {
+          // Fallback (unlikely): position in logical pixels
+          img.style.left = `${ex}px`;
+          img.style.top = `${ey}px`;
+          img.style.width = `${size}px`;
+          img.style.height = `${size}px`;
+        }
       }
 
       rafId = requestAnimationFrame(tick);
@@ -1065,7 +1092,7 @@ export default function GameCanvas() {
       // Use the real enemy sprite from public assets
       img.src = "/enemy.gif";
       img.alt = "Enemy";
-      img.style.position = "fixed";
+      img.style.position = "absolute";
       img.style.left = `${enemyPosRef.current.x}px`;
       img.style.top = `${enemyPosRef.current.y}px`;
       img.style.width = `${enemySizeRef.current}px`;
@@ -1073,7 +1100,8 @@ export default function GameCanvas() {
       img.style.pointerEvents = "none";
       img.style.zIndex = "10";
       img.style.setProperty("image-rendering", "pixelated");
-      document.body.appendChild(img);
+      const host = overlayRef.current ?? document.body;
+      host.appendChild(img);
       enemyImgRef.current = img;
     }
     return () => {
@@ -1200,13 +1228,18 @@ export default function GameCanvas() {
   };
 
   return (
-    <div className="relative grid h-[100svh] w-[100vw] place-items-center overflow-hidden">
+    <div
+      ref={rootRef}
+      className="relative grid h-[100svh] w-[100vw] place-items-center overflow-hidden"
+    >
       <canvas
         ref={canvasRef}
         width={CANVAS_W}
         height={CANVAS_H}
         className="block aspect-[4/5] w-[min(100vw,calc(100svh*0.8))] touch-none bg-black select-none"
       />
+      {/* Absolute overlay aligned to the canvas; hosts the enemy GIF and clips to canvas area */}
+      <div ref={overlayRef} className="pointer-events-none" />
       {overlay()}
       <p className="mt-3 text-sm text-zinc-300">
         背景画像は <code>/public/maps/map1.jpg</code> または{" "}
