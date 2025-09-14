@@ -26,6 +26,12 @@ const BULLET_SIZE: Vec = { x: 6, y: 14 };
 const OBSTACLE_SIZE: Vec = { x: 46, y: 46 };
 const POWER_SIZE: Vec = { x: 28, y: 28 };
 
+// Enemy growth parameters
+const ENEMY_MIN_SIZE = 24;
+const ENEMY_MAX_SIZE = 128;
+const ENEMY_GROWTH_PER_HIT = 6; // px added per hit
+const ENEMY_GROWTH_RATE = 120; // px/sec toward target size
+
 const SCROLL_SPEED = 160; // px/s (world moves downward visually)
 const PLAYER_BASE_SPEED = 320; // px/s
 const BULLET_SPEED = 640; // px/s upward
@@ -69,6 +75,7 @@ export default function GameCanvas() {
   const enemyPosRef = useRef<Vec>({ x: CANVAS_W / 2, y: 50 });
   const enemyVelRef = useRef<Vec>({ x: 150, y: 100 });
   const enemySizeRef = useRef<number>(32);
+  const enemyTargetSizeRef = useRef<number>(32);
   const wsAxRef = useRef(0); // normalized [-1,1] from gamma
   const wsAyRef = useRef(0); // normalized [-1,1] from beta
   const roomRef = useRef<string>("default");
@@ -386,6 +393,11 @@ export default function GameCanvas() {
     bulletsRef.current = [];
     obstaclesRef.current = [];
     powersRef.current = [];
+    // Reset enemy
+    enemyPosRef.current = { x: CANVAS_W / 2, y: 50 };
+    enemyVelRef.current = { x: 150, y: 100 };
+    enemySizeRef.current = 32;
+    enemyTargetSizeRef.current = 32;
     // Reset tile traversal state
     setCurrentTileIndex(0);
     tileStartTimeRef.current = 0;
@@ -975,7 +987,19 @@ export default function GameCanvas() {
       let ey = enemyPosRef.current.y + enemyVelRef.current.y * dt;
       let evx = enemyVelRef.current.x;
       let evy = enemyVelRef.current.y;
-      const size = enemySizeRef.current;
+      // Smoothly move current size toward target size
+      const target = Math.max(
+        ENEMY_MIN_SIZE,
+        Math.min(ENEMY_MAX_SIZE, enemyTargetSizeRef.current),
+      );
+      let size = enemySizeRef.current;
+      if (Math.abs(target - size) > 0.01) {
+        const dir = target > size ? 1 : -1;
+        const delta = ENEMY_GROWTH_RATE * dt;
+        const next = size + dir * Math.min(Math.abs(target - size), delta);
+        size = next;
+        enemySizeRef.current = size;
+      }
 
       // Bounce at canvas edges
       if (ex <= 0) {
