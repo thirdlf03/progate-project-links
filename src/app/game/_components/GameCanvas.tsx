@@ -1017,9 +1017,8 @@ export default function GameCanvas() {
     let img: HTMLImageElement | null = null;
     if (typeof window !== "undefined" && state.status === "running") {
       img = document.createElement("img");
-      // Tiny placeholder GIF (1x1 px). Replace public asset later if desired.
-      img.src =
-        "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+      // Use the real enemy sprite from public assets
+      img.src = "/enemy.gif";
       img.alt = "Enemy";
       img.style.position = "fixed";
       img.style.left = `${enemyPosRef.current.x}px`;
