@@ -735,6 +735,22 @@ export default function GameCanvas() {
         setState({ status: "over", win: false, durationMs });
       }
 
+      // Collisions: player vs enemy (GIF)
+      {
+        const eRect: Rect = {
+          x: enemyPosRef.current.x,
+          y: enemyPosRef.current.y,
+          w: enemySizeRef.current,
+          h: enemySizeRef.current,
+        };
+        if (aabb(p, eRect)) {
+          const startedAt =
+            (state.status === "running" ? state.startedAt : ts) || ts;
+          const durationMs = Math.max(0, ts - startedAt);
+          setState({ status: "over", win: false, durationMs });
+        }
+      }
+
       // Collisions: player vs power-up
       for (const pw of powersRef.current) {
         if (aabb(p, pw)) {
