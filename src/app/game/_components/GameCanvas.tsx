@@ -28,7 +28,7 @@ const POWER_SIZE: Vec = { x: 28, y: 28 };
 
 // Enemy growth parameters
 const ENEMY_MIN_SIZE = 24;
-const ENEMY_MAX_SIZE = 128;
+const ENEMY_MAX_SIZE = 100000;
 const ENEMY_GROWTH_PER_HIT = 6; // px added per hit
 const ENEMY_GROWTH_RATE = 120; // px/sec toward target size
 
@@ -100,6 +100,7 @@ export default function GameCanvas() {
   const [crashCause, setCrashCause] = useState<string | null>(null);
   const [causeLoading, setCauseLoading] = useState(false);
   const submittedRef = useRef(false);
+  const lastCollisionRef = useRef<"obstacle" | "gifEnemy" | null>(null);
 
   const recordRun = api.game.recordRun.useMutation();
   const analyzeCrash = api.game.analyzeCrash.useMutation();
@@ -732,6 +733,7 @@ export default function GameCanvas() {
         const startedAt =
           (state.status === "running" ? state.startedAt : ts) || ts;
         const durationMs = Math.max(0, ts - startedAt);
+        lastCollisionRef.current = "obstacle";
         setState({ status: "over", win: false, durationMs });
       }
 
@@ -747,6 +749,7 @@ export default function GameCanvas() {
           const startedAt =
             (state.status === "running" ? state.startedAt : ts) || ts;
           const durationMs = Math.max(0, ts - startedAt);
+          lastCollisionRef.current = "gifEnemy";
           setState({ status: "over", win: false, durationMs });
         }
       }
@@ -972,6 +975,7 @@ export default function GameCanvas() {
           distance: Math.floor(worldY),
           powerLevel,
           language: "ja",
+          collision: lastCollisionRef.current ?? "obstacle",
         })
         .then((res) => setCrashCause(res.cause))
         .catch(() => setCrashCause("原因の推定に失敗しました。"))
