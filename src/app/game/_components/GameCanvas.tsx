@@ -49,6 +49,8 @@ const TOTAL_TILES = GRID_SIZE * GRID_SIZE;
 // Camera traverses tiles slowly for smoother transitions (tiles/second)
 const CAMERA_SPEED = 0.15;
 
+// Enemy GIF refs are declared inside the component (moved below)
+
 export default function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -62,6 +64,11 @@ export default function GameCanvas() {
   // --- WebSocket (mobile tilt controller) ---
   const wsRef = useRef<WebSocket | null>(null);
   const wsConnectedRef = useRef(false);
+  // Enemy (GIF) refs
+  const enemyImgRef = useRef<HTMLImageElement | null>(null);
+  const enemyPosRef = useRef<Vec>({ x: CANVAS_W / 2, y: 50 });
+  const enemyVelRef = useRef<Vec>({ x: 150, y: 100 });
+  const enemySizeRef = useRef<number>(32);
   const wsAxRef = useRef(0); // normalized [-1,1] from gamma
   const wsAyRef = useRef(0); // normalized [-1,1] from beta
   const roomRef = useRef<string>("default");
@@ -954,6 +961,82 @@ export default function GameCanvas() {
       connectWS();
     }
   }, [state.status, connectWS]);
+  // Enemy (GIF) movement loop (independent of canvas rendering)
+  useEffect(() => {
+    if (state.status !== "running") return;
+    let rafId: number | null = null;
+    let last = performance.now();
+    const tick = (now: number) => {
+      const dt = Math.min(50, now - last) / 1000;
+      last = now;
+
+      // Integrate position
+      let ex = enemyPosRef.current.x + enemyVelRef.current.x * dt;
+      let ey = enemyPosRef.current.y + enemyVelRef.current.y * dt;
+      let evx = enemyVelRef.current.x;
+      let evy = enemyVelRef.current.y;
+      const size = enemySizeRef.current;
+
+      // Bounce at canvas edges
+      if (ex <= 0) {
+        ex = 0;
+        evx = Math.abs(evx);
+      } else if (ex >= CANVAS_W - size) {
+        ex = CANVAS_W - size;
+        evx = -Math.abs(evx);
+      }
+      if (ey <= 0) {
+        ey = 0;
+        evy = Math.abs(evy);
+      } else if (ey >= CANVAS_H - size) {
+        ey = CANVAS_H - size;
+        evy = -Math.abs(evy);
+      }
+
+      enemyPosRef.current = { x: ex, y: ey };
+      enemyVelRef.current = { x: evx, y: evy };
+
+      // Apply to DOM element directly to avoid re-render per frame
+      const img = enemyImgRef.current;
+      if (img) {
+        img.style.left = `${ex}px`;
+        img.style.top = `${ey}px`;
+        img.style.width = `${size}px`;
+        img.style.height = `${size}px`;
+      }
+
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+    };
+  }, [state.status]);
+  // Mount/unmount the enemy GIF element in the DOM when running
+  useEffect(() => {
+    let img: HTMLImageElement | null = null;
+    if (typeof window !== "undefined" && state.status === "running") {
+      img = document.createElement("img");
+      // Tiny placeholder GIF (1x1 px). Replace public asset later if desired.
+      img.src =
+        "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+      img.alt = "Enemy";
+      img.style.position = "fixed";
+      img.style.left = `${enemyPosRef.current.x}px`;
+      img.style.top = `${enemyPosRef.current.y}px`;
+      img.style.width = `${enemySizeRef.current}px`;
+      img.style.height = `${enemySizeRef.current}px`;
+      img.style.pointerEvents = "none";
+      img.style.zIndex = "10";
+      img.style.setProperty("image-rendering", "pixelated");
+      document.body.appendChild(img);
+      enemyImgRef.current = img;
+    }
+    return () => {
+      img?.parentNode?.removeChild(img);
+      enemyImgRef.current = null;
+    };
+  }, [state.status]);
   const overlay = () => {
     if (state.status === "init") {
       const dotClass =
