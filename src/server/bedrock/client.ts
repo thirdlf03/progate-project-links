@@ -62,7 +62,7 @@ export async function invokeAnthropicMessages(options: {
         ],
         inferenceConfig: {
           temperature,
-          maxNewTokens: maxTokens,
+          maxTokens: maxTokens,
         },
       })
     : JSON.stringify({
